@@ -201,15 +201,7 @@ with mss.mss() as sct:
             else:
                 color = (255, 255, 255)
             cv2.circle(frame, (x, y), 4, color, -1)
-            cv2.putText(
-                frame,
-                f"{score:.1f}",
-                (x + 5, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.3,
-                color,
-                1
-            )
+            cv2.putText(frame,f"{score:.1f}",(x + 5, y),cv2.FONT_HERSHEY_SIMPLEX,0.3,color,1)
         best_sector = np.argmax(sector_scores)
         current_angle = (best_sector + 0.5) * (np.pi / 32)
         vx = np.cos(current_angle)
@@ -219,20 +211,9 @@ with mss.mss() as sct:
         mouse_y = center_y - vy * LOOKAHEAD
         best_score = np.max(sector_scores)
         pyautogui.moveTo(mouse_x, mouse_y)
-        end_x = int(
-            900 + vx * 200
-        )
-        end_y = int(
-            475 - vy * 200
-        )
-        cv2.line(
-            frame,
-            (900, 475),
-            (end_x, end_y),
-            (255, 255, 0),
-            4
-        )
+        end_x = int(900 + vx * 200)
+        end_y = int(475 - vy * 200)
+        cv2.line(frame,(900, 475),(end_x, end_y),(255, 255, 0),4)
         cv2.imshow('Slither bot vision', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-        past_angle = current_angle
