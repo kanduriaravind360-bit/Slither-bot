@@ -3,18 +3,31 @@ import mss
 import numpy as np
 import pyautogui
 import pytesseract
+import pygetwindow as gw
+import time
+import threading
 
+window = gw.getWindowsWithTitle("slither.io")[0]
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 pyautogui.PAUSE = 0.0
-screen_w, screen_h = pyautogui.size()
-center_x = screen_w // 2
-center_y = screen_h // 2
 monitor_box = {
-    'top': center_y - 475,
-    'left': center_x - 900,
-    'width': 1800,
-    'height': 950,
+    "top": window.top,
+    "left": window.left,
+    "width": window.width,
+    "height": window.height,
 }
+W = monitor_box["width"]
+H = monitor_box["height"]
+mask_x1 = 0
+mask_y1 = H - 50
+mask_x2 = 145
+mask_y2 = H
+length_x1 = 104
+length_y1 = H - 50
+length_x2 = 170
+length_y2 = H - 27
+capture_center_x = monitor_box["width"] // 2
+capture_center_y = monitor_box["height"] // 2
 def food(frame):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     smallest_distance = float('inf')
@@ -23,10 +36,10 @@ def food(frame):
     lower_vibrant = np.array([0, 30, 80])
     upper_vibrant = np.array([179, 255, 255])
     food_mask = cv2.inRange(hsv, lower_vibrant, upper_vibrant)
-    cv2.rectangle(food_mask,(1580, 730),(1800, 950),0,-1)
-    cv2.rectangle(food_mask,(1450, 0),(1800, 250),0,-1)
+    cv2.rectangle(food_mask, (W - 220, H - 220), (W, H), 0, -1)
+    cv2.rectangle(food_mask, (W - 350, 0), (W, 250), 0, -1)
+    cv2.rectangle(food_mask, (mask_x1, mask_y1), (mask_x2, mask_y2), 0, -1)
     contours, hierarchy = cv2.findContours(food_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.imshow("Food Mask", food_mask)
     for c in contours:
         M = cv2.moments(c)
         if 2< M['m00'] < 400:
@@ -37,8 +50,8 @@ def food(frame):
             if circularity > 0.65:
                 cx = int(M["m10"] / M["m00"])
                 cy = int(M["m01"] / M["m00"])
-                dx = cx - 900
-                dy = cy - 475
+                dx = cx - capture_center_x
+                dy = cy - capture_center_y
                 distance = np.sqrt(dx * dx + dy * dy)
                 foods.append([cx, cy])
                 cv2.circle(frame, (cx, cy), 10, (0, 255, 0), -1)
@@ -52,10 +65,11 @@ def dfood(frame):
     dfoods = []
     lower_vibrant = np.array([0, 30, 80])
     upper_vibrant = np.array([179, 255, 255])
-    food_mask = cv2.inRange(hsv, lower_vibrant, upper_vibrant)
-    cv2.rectangle(food_mask, (1580, 730), (1800, 950), 0, -1)
-    cv2.rectangle(food_mask, (1450, 0), (1800, 250), 0, -1)
-    contours, hierarchy = cv2.findContours(food_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    dfood_mask = cv2.inRange(hsv, lower_vibrant, upper_vibrant)
+    cv2.rectangle(dfood_mask, (W - 220, H - 220), (W, H), 0, -1)
+    cv2.rectangle(dfood_mask, (W - 350, 0), (W, 250), 0, -1)
+    cv2.rectangle(dfood_mask, (mask_x1, mask_y1), (mask_x2, mask_y2), 0, -1)
+    contours, hierarchy = cv2.findContours(dfood_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for c in contours:
         M = cv2.moments(c)
         if 400 < M['m00'] < 1500:
@@ -84,15 +98,15 @@ def threat(frame):
     threats = []
     kernel = np.ones((5, 5), np.uint8)
     threat_mask = cv2.morphologyEx(threat_mask, cv2.MORPH_CLOSE, kernel)
-    cv2.rectangle(threat_mask, (1580, 730), (1800, 950), 0, -1)
-    cv2.rectangle(threat_mask, (1450, 0), (1800, 250), 0, -1)
+    cv2.rectangle(threat_mask, (W - 220, H - 220), (W, H), 0, -1)
+    cv2.rectangle(threat_mask, (W - 350, 0), (W, 250), 0, -1)
+    cv2.rectangle(threat_mask, (mask_x1, mask_y1), (mask_x2, mask_y2), 0, -1)
     contours, hierarchy = cv2.findContours(threat_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.imshow("Threat Mask", threat_mask)
     for c in contours:
         M = cv2.moments(c)
-        if M['m00'] > 3000:
-            inside = cv2.pointPolygonTest(c,(900, 475),True)
-            if inside >= -3:
+        if M['m00'] > 4000:
+            inside = cv2.pointPolygonTest(c,(capture_center_x, capture_center_y),False)
+            if inside >= 0:
                 cv2.drawContours(frame, [c], -1, (255, 255, 255), 4)
                 continue
             for point in c[::50]:
@@ -108,10 +122,10 @@ def wall(frame):
     lower_vibrant = np.array([0, 100, 100])
     upper_vibrant = np.array([5, 255, 255])
     wall_mask = cv2.inRange(hsv, lower_vibrant, upper_vibrant)
-    cv2.rectangle(wall_mask, (1580, 730), (1800, 950), 0, -1)
-    cv2.rectangle(wall_mask, (1450, 0), (1800, 250), 0, -1)
+    cv2.rectangle(wall_mask, (W - 220, H - 220), (W, H), 0, -1)
+    cv2.rectangle(wall_mask, (W - 350, 0), (W, 250), 0, -1)
+    cv2.rectangle(wall_mask, (mask_x1, mask_y1), (mask_x2, mask_y2), 0, -1)
     contours, hierarchy = cv2.findContours(wall_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.imshow("Wall Mask", wall_mask)
     for c in contours:
         M = cv2.moments(c)
         if M['m00'] > 10000:
@@ -125,8 +139,8 @@ def wall(frame):
 def get_sector_scores(foods, dfoods, threats, wall):
     sector_scores = [0.0] * 64
     for food in foods:
-        dx = food[0] - 900
-        dy = 475 - food[1]
+        dx = food[0] - capture_center_x
+        dy = capture_center_y - food[1]
         distance = np.sqrt(dx*dx + dy*dy)
         angle = np.arctan2(dy, dx)
         angle = (angle + 2*np.pi) % (2*np.pi)
@@ -138,8 +152,8 @@ def get_sector_scores(foods, dfoods, threats, wall):
         sector_scores[(sector - 2) % 64] += score * 0.25
         sector_scores[(sector + 2) % 64] += score * 0.25
     for threat in threats:
-        dx = threat[0] - 900
-        dy = 475 - threat[1]
+        dx = threat[0] - capture_center_x
+        dy = capture_center_y - threat[1]
         distance = np.sqrt(dx*dx + dy*dy)
         angle = np.arctan2(dy, dx)
         angle = (angle + 2*np.pi) % (2*np.pi)
@@ -151,8 +165,8 @@ def get_sector_scores(foods, dfoods, threats, wall):
         sector_scores[(sector - 2) % 64] -= score * 0.4
         sector_scores[(sector + 2) % 64] -= score * 0.4
     for wallp in wall:
-        dx = wallp[0] - 900
-        dy = 475 - wallp[1]
+        dx = wallp[0] - capture_center_x
+        dy = capture_center_y - wallp[1]
         distance = np.sqrt(dx*dx + dy*dy)
         angle = np.arctan2(dy, dx)
         angle = (angle + 2*np.pi) % (2*np.pi)
@@ -164,8 +178,8 @@ def get_sector_scores(foods, dfoods, threats, wall):
         sector_scores[(sector - 2) % 64] -= score * 0.4
         sector_scores[(sector + 2) % 64] -= score * 0.4
     for dfood in dfoods:
-        dx = dfood[0] - 900
-        dy = 475 - dfood[1]
+        dx = dfood[0] - capture_center_x
+        dy = capture_center_y - dfood[1]
         distance = np.sqrt(dx*dx + dy*dy)
         angle = np.arctan2(dy, dx)
         angle = (angle + 2 * np.pi) % (2 * np.pi)
@@ -178,10 +192,42 @@ def get_sector_scores(foods, dfoods, threats, wall):
         sector_scores[(sector + 2) % 64] += score * 0.25
     return sector_scores
 
+current_length = 0
+latest_frame = None
+frame_lock = threading.Lock()
+frame_count = 0
+for window in gw.getAllWindows():
+    if window.title == "slither.io - Brave":
+        window.activate()
+        break
+time.sleep(1)
+
+def length_reader():
+    global current_length
+    while True:
+        with frame_lock:
+            if latest_frame is None:
+                continue
+            crop = latest_frame[length_y1:length_y2, length_x1:length_x2].copy()
+            cv2.imshow("Length Crop", crop)
+            cv2.waitKey(1)
+        text = pytesseract.image_to_string(crop)
+        try:
+            current_length = int(text)
+            print(current_length)
+        except:
+            pass
+        time.sleep(0.5)
+
+ocr_thread = threading.Thread(target=length_reader, daemon=True)
+ocr_thread.start()
+
 with mss.mss() as sct:
     while True:
         raw_img = np.array(sct.grab(monitor_box))
         frame = cv2.cvtColor(raw_img, cv2.COLOR_BGRA2BGR)
+        with frame_lock:
+            latest_frame = frame.copy()
         dfood_data = dfood(frame)
         wall_data = wall(frame)
         food_data = food(frame)
@@ -191,8 +237,8 @@ with mss.mss() as sct:
         sector_scores = get_sector_scores(foods, dfood_data, threats, wall_data)
         for sector in range(64):
             angle = (sector + 0.5) * (2 * np.pi / 64)
-            x = int(900 + np.cos(angle) * 300)
-            y = int(475 - np.sin(angle) * 300)
+            x = int(capture_center_x + np.cos(angle) * 300)
+            y = int(capture_center_y - np.sin(angle) * 300)
             score = sector_scores[sector]
             if score > 0:
                 color = (0, 255, 0)
@@ -207,13 +253,13 @@ with mss.mss() as sct:
         vx = np.cos(current_angle)
         vy = np.sin(current_angle)
         LOOKAHEAD = 300
-        mouse_x = center_x + vx * LOOKAHEAD
-        mouse_y = center_y - vy * LOOKAHEAD
+        mouse_x = window.left + capture_center_x + vx * LOOKAHEAD
+        mouse_y = window.top + capture_center_y - vy * LOOKAHEAD
         best_score = np.max(sector_scores)
         pyautogui.moveTo(mouse_x, mouse_y)
-        end_x = int(900 + vx * 200)
-        end_y = int(475 - vy * 200)
-        cv2.line(frame,(900, 475),(end_x, end_y),(255, 255, 0),4)
+        end_x = int(capture_center_x + vx * 200)
+        end_y = int(capture_center_y - vy * 200)
+        cv2.line(frame,(capture_center_x, capture_center_y),(end_x, end_y),(255, 255, 0),4)
         cv2.imshow('Slither bot vision', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
