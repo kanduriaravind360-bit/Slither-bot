@@ -28,10 +28,10 @@ class slitherenv(gym.Env):
             )
         )
         self.observation_space = spaces.Box(
-            low=0,
-            high=255,
-            shape=(256, 256, 3),
-            dtype=np.uint8
+            low = -1000,
+            high = 1000,
+            shape = (256,),
+            dtype = np.float32
         )
         self.action_space = spaces.Discrete(5)
         self.play_button = cv2.imread("templatesplayagain3.png")
@@ -189,51 +189,106 @@ class slitherenv(gym.Env):
 
 
 
-    def get_observation(self):
-        frame = None
-        while frame is None:
-            frame = self.camera.get_latest_frame()
-        frame = cv2.resize(frame, (256, 256))
-        self.height, self.width = frame.shape[:2]
-        self.center_x = self.width // 2
-        self.center_y = self.height // 2
-        return frame
+    def wall(self,frame, hsv):
+        wall = []
+        height, width = frame.shape[:2]
+        lower_vibrant = np.array([0, 100, 100])
+        upper_vibrant = np.array([5, 255, 255])
+        wall_mask = cv2.inRange(hsv, lower_vibrant, upper_vibrant)
+        cv2.rectangle(wall_mask, (width - 220, height - 220), (width, height), 0, -1)
+        cv2.rectangle(wall_mask, (width - 350, 0), (width, 250), 0, -1)
+        cv2.rectangle(wall_mask, (self.mask_x1, self.mask_y1), (self.mask_x2, self.mask_y2), 0, -1)
+        contours, hierarchy = cv2.findContours(wall_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in contours:
+            M = cv2.moments(c)
+            if M['m00'] > 10000:
+                for point in c[::50]:
+                    px = point[0][0]
+                    py = point[0][1]
+                    wall.append([px, py])
+        return wall
+
+
+
+    def wall_score(self, wall, center_x, center_y):
+        sector_scores = np.zeros(64)
+        for wallp in wall:
+            dx = wallp[0] - center_x
+            dy = center_y - wallp[1]
+            distance = np.sqrt(dx * dx + dy * dy)
+            angle = np.arctan2(dy, dx)
+            angle = (angle + 2 * np.pi) % (2 * np.pi)
+            sector = int(angle / (np.pi / 32))
+            score = 700 / (distance + 1)
+            sector_scores[sector] -= score
+            sector_scores[(sector - 1) % 64] -= score * 0.65
+            sector_scores[(sector + 1) % 64] -= score * 0.65
+            sector_scores[(sector - 2) % 64] -= score * 0.4
+            sector_scores[(sector + 2) % 64] -= score * 0.4
+        return sector_scores
+
+
+
+    def get_observation(self, raw_frame):
+        hsv = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2HSV)
+        gray = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
+        foods, _, center_x, center_y = self.food(raw_frame, hsv)
+        dfoods = self.dfood(raw_frame, hsv)
+        threats = self.threat(raw_frame, hsv, gray)
+        walls = self.wall(raw_frame, hsv)
+        food_scores = self.food_score(foods, center_x, center_y)
+        dfood_scores = self.dfood_score(dfoods, center_x, center_y)
+        threat_scores = self.threat_score(threats, center_x, center_y)
+        wall_scores = self.wall_score(walls, center_x, center_y)
+        obs = np.concatenate([
+            food_scores,
+            dfood_scores,
+            threat_scores,
+            wall_scores,
+        ]).astype(np.float32)
+        return obs
 
 
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        frame = self.get_observation()
+        raw_frame = None
+        while raw_frame is None:
+            raw_frame = self.camera.get_latest_frame()
+        frame = cv2.resize(raw_frame, (256, 256))
         if self.is_dead(frame):
             pyautogui.click(
                 self.window.left + (self.window.right - self.window.left) // 2,
                 self.window.top + (self.window.bottom - self.window.top) // 2
             )
             time.sleep(1)
-        frame = self.get_observation()
+            raw_frame = None
+            while raw_frame is None:
+                raw_frame = self.camera.get_latest_frame()
         self.step_count = 0
         self.current_angle = np.random.uniform(0, 2 * np.pi)
-        return frame ,{}
+        obs = self.get_observation(raw_frame)
+        return obs ,{}
 
 
 
     def step(self, action):
         self.step_count += 1
-        TURN = np.deg2rad(6)
+        turn = np.deg2rad(6)
         if action == 0:
-            self.current_angle -= 2 * TURN
+            self.current_angle -= 2 * turn
         elif action == 1:
-            self.current_angle -= TURN
+            self.current_angle -= turn
         elif action == 2:
             pass
         elif action == 3:
-            self.current_angle += TURN
+            self.current_angle += turn
         elif action == 4:
-            self.current_angle += 2 * TURN
+            self.current_angle += 2 * turn
         self.current_angle %= 2 * np.pi
         vx = np.cos(self.current_angle)
         vy = np.sin(self.current_angle)
-        LOOKAHEAD = 450
+        LOOKAHEAD = 300
         mouse_x = self.window.left + (self.window.right - self.window.left)//2 + vx * LOOKAHEAD
         mouse_y = self.window.top + (self.window.bottom - self.window.top)//2 - vy * LOOKAHEAD
         pyautogui.moveTo(mouse_x, mouse_y,duration=0)
@@ -241,46 +296,70 @@ class slitherenv(gym.Env):
         while raw_frame is None:
             raw_frame = self.camera.get_latest_frame()
         hsv = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2HSV)
-        #gray = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
         foods, min_distance, center_x, center_y = self.food(raw_frame, hsv)
         dfoods = self.dfood(raw_frame, hsv)
-        #threats = self.threat(raw_frame, hsv, gray)
+        threats = self.threat(raw_frame, hsv, gray)
+        walls = self.wall(raw_frame, hsv)
         frame = cv2.resize(raw_frame, (256, 256))
-        #snake_sector = int(
-            #self.current_angle /
-            #(2 * np.pi / 64)
-        #) % 64
+        snake_sector = int(
+            self.current_angle /
+            (2 * np.pi / 64)
+        ) % 64
         reward = 0
-        #food_sector_scores = self.food_score(foods, center_x, center_y)
-        #best_food_sector = np.argmax(food_sector_scores)
-        #threat_sector_scores = self.threat_score(threats, center_x, center_y)
-        #dfood_sector_scores = self.dfood_score(dfoods, center_x, center_y)
-        #best_dfood_sector = np.argmax(dfood_sector_scores)
-        #if food_sector_scores[best_food_sector] > 0:
-            #if snake_sector == best_food_sector:
-                #reward += food_sector_scores[snake_sector] * 0.9
-            #elif food_sector_scores[snake_sector] > 0:
-                #reward -= food_sector_scores[snake_sector] * 0.13
-        #reward += threat_sector_scores[snake_sector] * 0.06
-        #if dfood_sector_scores[best_dfood_sector] > 0:
-            #if snake_sector == best_dfood_sector:
-                #reward += dfood_sector_scores[snake_sector] * 0.9
-            #elif dfood_sector_scores[snake_sector] > 0:
-                #reward -= dfood_sector_scores[snake_sector] * 0.2
-        reward += 0.02
+        food_sector_scores = self.food_score(foods, center_x, center_y)
+        threat_sector_scores = self.threat_score(threats, center_x, center_y)
+        dfood_sector_scores = self.dfood_score(dfoods, center_x, center_y)
+        wall_sector_scores = self.wall_score(walls, center_x, center_y)
+        food_sector_scores = np.roll(food_sector_scores, -snake_sector)
+        dfood_sector_scores = np.roll(dfood_sector_scores, -snake_sector)
+        threat_sector_scores = np.roll(threat_sector_scores, -snake_sector)
+        wall_sector_scores = np.roll(wall_sector_scores, -snake_sector)
+        reward += (
+                2.0 * food_sector_scores[0]
+                + 1.6 * food_sector_scores[1]
+                + 1.6 * food_sector_scores[-1]
+                + 0.8 * food_sector_scores[2]
+                + 0.8 * food_sector_scores[-2]
+        )
+        reward += (
+                1.0 * threat_sector_scores[0]
+                + 0.8 * threat_sector_scores[1]
+                + 0.8 * threat_sector_scores[-1]
+                + 0.4 * threat_sector_scores[2]
+                + 0.4 * threat_sector_scores[-2]
+        )
+        reward += (
+                1.0 * dfood_sector_scores[0]
+                + 0.8 * dfood_sector_scores[1]
+                + 0.8 * dfood_sector_scores[-1]
+                + 0.4 * dfood_sector_scores[2]
+                + 0.4 * dfood_sector_scores[-2]
+        )
+        reward += (
+                wall_sector_scores[0]
+                + 0.8 * wall_sector_scores[1]
+                + 0.8 * wall_sector_scores[-1]
+                + 0.4 * wall_sector_scores[2]
+                + 0.4 * wall_sector_scores[-2]
+        )
+        reward += 0.01
         if min_distance is not None and min_distance <= 40:
-            reward += 10
-        if self.step_count % 5 == 0:
-            done = self.is_dead(frame)
-        else:
-            done = False
+            reward += 50
+        done = self.is_dead(frame)
         if done:
             reward -= 500
         terminated = done
         truncated = False
         if done:
             time.sleep(1)
-        return frame, reward, terminated, truncated, {}
+        obs = np.concatenate([
+            food_sector_scores,
+            dfood_sector_scores,
+            threat_sector_scores,
+            wall_sector_scores,
+        ]).astype(np.float32)
+        return obs, reward, terminated, truncated, {}
 
 
 

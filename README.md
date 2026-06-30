@@ -1,18 +1,19 @@
-# Slither Bot V1
+# Slither Bot V2
 
-A computer vision based Slither.io bot built with Python, OpenCV, MSS, and PyAutoGUI.
+A computer vision and reinforcement learning based Slither.io bot built with Python, OpenCV, DxCam, PPO, and PyAutoGUI.
 
 ## Features
 
-- Real-time screen capture using MSS
-- Food detection using HSV color filtering
+- Real-time screen capture using DxCam
+- Food detection using HSV  and gray color filtering
 - Threat detection using contour analysis
-- Basic avoidance behavior
+- Trained through reinforcement learning
+- Better avoidance behavior
 - Mouse control through PyAutoGUI
 
 ## How It Works
 
-1. Capture the game screen.
+1. Capture the observations
 2. Detect food pellets.
 3. Detect nearby snake bodies.
 4. Move toward food when safe.
@@ -20,28 +21,19 @@ A computer vision based Slither.io bot built with Python, OpenCV, MSS, and PyAut
 
 ## Technologies Used
 
-- Python
 - OpenCV
-- NumPy
-- MSS
+- DxCam
 - PyAutoGUI
-- Tesseract OCR
+- PPO
 
 ## Current Limitations
 
-- No enemy head detection
-- No path planning
-- No reinforcement learning
-- Threat detection can be unreliable for some snake colors and skins
+- Doesn't detect walls that well.
+- Sometimes doesn't detect red snakes. 
+- Doesn't know how to boost. 
+- Doesn't go towards dead snake food pellets.
 
-## Future Plans
-
-- Improve snake detection
-- Detect enemy heads separately
-- Add path planning
-- Train a reinforcement learning agent
-- Create a full autonomous Slither.io AI
 
 ## Version
 
-Current release: **V1.0**
+Current release: **V2.0**

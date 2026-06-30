@@ -116,7 +116,7 @@ def wall(frame, hsv):
     for c in contours:
         M = cv2.moments(c)
         if M['m00'] > 10000:
-            cv2.drawContours(frame, [c], -1, (0, 0, 255), 5)
+            cv2.drawContours(frame, [c], -1, (0, 255, 255), 5)
             for point in c[::50]:
                 px = point[0][0]
                 py = point[0][1]
