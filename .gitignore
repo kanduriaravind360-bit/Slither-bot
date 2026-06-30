@@ -4,6 +4,7 @@
 *.onnx
 
 checkpoints/
+Slitherppo_v2.1
 models/
 
 .venv/

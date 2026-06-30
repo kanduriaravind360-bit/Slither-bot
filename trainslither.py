@@ -34,4 +34,4 @@ model = PPO(
     verbose=1,
 )
 model.learn(total_timesteps=1000000, callback=checkpoint_callback)
-model.save("Slitherppo_v1.0")
+model.save("Slitherppo_v2.0")
